@@ -17,4 +17,6 @@ export function isCreator(user: { email?: string | null } | null): boolean {
 export interface UserContent {
   book_edits: Record<number, unknown>;
   wedding_timeline: unknown[];
+  program_events: unknown[];
+  program_providers: unknown[];
 }

@@ -22,8 +22,10 @@ import {
 } from 'lucide-react';
 import { chapterData, type Chapter } from './data/chapters';
 import { weddingDefault, isWeddingTimeline, type WeddingMoment } from './data/wedding';
+import { isProgramEvents, isProgramProviders, programDefaultEvents, programDefaultProviders, type ProgramEvent, type ProgramProvider } from './data/program';
 import WeddingPage from './components/WeddingPage';
 import WeddingEditor from './components/WeddingEditor';
+import ProgramPage from './components/ProgramPage';
 import AuthPanel from './components/AuthPanel';
 import { isCreator, isSupabaseConfigured, supabase, type UserContent } from './lib/supabase';
 
@@ -166,12 +168,13 @@ function SplitTitle({ text, className = '' }: { text: string; className?: string
 
 /* ----------------------------------------------------------------- header */
 
-type NavTarget = 'top' | 'livre' | 'chapitres' | 'wedding';
+type NavTarget = 'top' | 'livre' | 'chapitres' | 'wedding' | 'programme';
 
 function Header({
   onNav,
   onStart,
   onWedding,
+  onProgram,
   inReader,
   inWedding,
   user,
@@ -180,6 +183,7 @@ function Header({
   onNav: (t: NavTarget) => void;
   onStart: () => void;
   onWedding: () => void;
+  onProgram: () => void;
   inReader: boolean;
   inWedding: boolean;
   user: User | null;
@@ -218,6 +222,7 @@ function Header({
             >
               Wedding Party
             </button>
+            <button onClick={onProgram} className="cursor-pointer transition-colors hover:text-smoke">Programme</button>
           </nav>
         </div>
         <div className="flex items-center gap-3">
@@ -237,6 +242,7 @@ function Header({
         <button onClick={() => onNav('chapitres')} className="shrink-0 cursor-pointer transition-colors hover:text-smoke">Chapitres</button>
         <button onClick={onStart} className="shrink-0 cursor-pointer transition-colors hover:text-smoke">Lire</button>
         <button onClick={onWedding} aria-current={inWedding ? 'page' : undefined} className={`shrink-0 cursor-pointer transition-colors hover:text-smoke ${inWedding ? 'font-bold underline decoration-2 underline-offset-4' : ''}`}>Wedding Party</button>
+        <button onClick={onProgram} className="shrink-0 cursor-pointer transition-colors hover:text-smoke">Programme</button>
       </nav>
     </header>
   );
@@ -1185,7 +1191,7 @@ function Editor({
 
 /* ---------------------------------------------------------------- footer */
 
-function Footer({ onNav, onEdit, onWedding }: { onNav: (t: NavTarget) => void; onEdit: () => void; onWedding: () => void }) {
+function Footer({ onNav, onEdit, onWedding, onProgram }: { onNav: (t: NavTarget) => void; onEdit: () => void; onWedding: () => void; onProgram: () => void }) {
   return (
     <footer className="border-t border-line">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-5 px-5 py-8 md:px-10">
@@ -1207,6 +1213,7 @@ function Footer({ onNav, onEdit, onWedding }: { onNav: (t: NavTarget) => void; o
           >
             Wedding Party
           </button>
+          <button onClick={onProgram} className="flex cursor-pointer items-center gap-2 rounded-full border border-line px-4 py-2 font-display text-[12px] font-semibold tracking-[0.04em] uppercase transition-colors hover:border-ink">Programme</button>
           <button
             onClick={onEdit}
             className="flex cursor-pointer items-center gap-2 rounded-full border border-line px-4 py-2 font-display text-[12px] font-semibold tracking-[0.04em] uppercase transition-colors hover:border-ink"
@@ -1239,12 +1246,14 @@ type Route =
   | { kind: 'chapter'; index: number }
   | { kind: 'editor' }
   | { kind: 'wedding' }
+  | { kind: 'programme' }
   | { kind: 'wedding-editor'; momentId: string | null };
 
 function parseRoute(): Route {
   const h = window.location.hash;
   if (h === '#/editer') return { kind: 'editor' };
   if (h === '#/wedding' || h === '#/wedding-party') return { kind: 'wedding' };
+  if (h === '#/programme') return { kind: 'programme' };
   if (h === '#/wedding/editer' || h === '#/editer-wedding') return { kind: 'wedding-editor', momentId: null };
   const wm = h.match(/^#\/wedding\/editer\/(.+)$/);
   if (wm) {
@@ -1318,6 +1327,9 @@ export default function App() {
   const [editing, setEditing] = useState(() => window.location.hash === '#/editer');
   const [weddingPreviewId, setWeddingPreviewId] = useState<string | null>(null);
   const [weddingMoments, setWeddingMoments] = useState<WeddingMoment[]>(() => loadWeddingMoments());
+  const [programEvents, setProgramEvents] = useState<ProgramEvent[]>(programDefaultEvents);
+  const [programProviders, setProgramProviders] = useState<ProgramProvider[]>(programDefaultProviders);
+  const [inProgram, setInProgram] = useState(() => parseRoute().kind === 'programme');
   const [inWedding, setInWedding] = useState(() => {
     const r = parseRoute();
     return r.kind === 'wedding' || r.kind === 'wedding-editor';
@@ -1347,16 +1359,18 @@ export default function App() {
   useEffect(() => {
     if (!supabase) return;
     let active = true;
-    supabase.from('site_content').select('book_edits, wedding_timeline').eq('id', 'main').maybeSingle<UserContent>().then(({ data, error }) => {
+    supabase.from('site_content').select('book_edits, wedding_timeline, program_events, program_providers').eq('id', 'main').maybeSingle<UserContent>().then(({ data, error }) => {
       if (!active) return;
       if (!error && data) {
         setEdits(data.book_edits as Record<number, ChapterEdit>);
         setWeddingMoments(isWeddingTimeline(data.wedding_timeline) ? data.wedding_timeline : weddingDefault);
+        setProgramEvents(isProgramEvents(data.program_events) && data.program_events.length ? data.program_events : programDefaultEvents);
+        setProgramProviders(isProgramProviders(data.program_providers) && data.program_providers.length ? data.program_providers : programDefaultProviders);
       }
       setContentReady(true);
     });
     return () => { active = false; };
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     if (!authReady || creator) return;
@@ -1373,9 +1387,11 @@ export default function App() {
       id: 'main',
       book_edits: patch.book_edits ?? edits,
       wedding_timeline: patch.wedding_timeline ?? weddingMoments,
+      program_events: patch.program_events ?? programEvents,
+      program_providers: patch.program_providers ?? programProviders,
       updated_at: new Date().toISOString(),
     });
-  }, [creator, edits, user, weddingMoments]);
+  }, [creator, edits, programEvents, programProviders, user, weddingMoments]);
   const chapters = useMemo<EffectiveChapter[]>(
     () =>
       chapterData.map((c, i) => {
@@ -1405,6 +1421,7 @@ export default function App() {
       setWeddingEditing(r.kind === 'wedding-editor');
       setWeddingEditId(r.kind === 'wedding-editor' ? r.momentId : null);
       setInWedding(r.kind === 'wedding' || r.kind === 'wedding-editor');
+      setInProgram(r.kind === 'programme');
       setChapter(r.kind === 'chapter' ? r.index : null);
     };
     window.addEventListener('hashchange', onHash);
@@ -1418,6 +1435,8 @@ export default function App() {
         ? 'Éditer — Le souffle en voyage, Matt Mez'
         : inWedding
           ? 'Wedding Party — Timeline Jour-J, Matt Mez'
+          : inProgram
+            ? 'Programme — Matt Mez'
           : chapter === null
             ? 'Le souffle en voyage — Matt Mez'
             : `${chapters[chapter].title} — Le souffle en voyage, Matt Mez`;
@@ -1432,12 +1451,13 @@ export default function App() {
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chapter, editing, inWedding, weddingEditing]);
+  }, [chapter, editing, inProgram, inWedding, weddingEditing]);
 
   const openChapter = useCallback((i: number) => {
     window.location.hash = `#/chapitre/${i + 1}`;
     setChapter(i);
     setInWedding(false);
+    setInProgram(false);
     setWeddingEditing(false);
     setEditing(false);
     setLastRead(i);
@@ -1448,6 +1468,17 @@ export default function App() {
     setWeddingPreviewId(null);
     window.location.hash = '#/wedding';
     setInWedding(true);
+    setInProgram(false);
+    setWeddingEditing(false);
+    setEditing(false);
+    setChapter(null);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const openProgram = useCallback(() => {
+    window.location.hash = '#/programme';
+    setInProgram(true);
+    setInWedding(false);
     setWeddingEditing(false);
     setEditing(false);
     setChapter(null);
@@ -1458,6 +1489,7 @@ export default function App() {
     if (!creator) { setAuthOpen(true); return; }
     window.location.hash = momentId ? `#/wedding/editer/${encodeURIComponent(momentId)}` : '#/wedding/editer';
     setInWedding(true);
+    setInProgram(false);
     setWeddingEditing(true);
     setWeddingEditId(momentId ?? null);
     setEditing(false);
@@ -1484,6 +1516,16 @@ export default function App() {
     void persistContent({ wedding_timeline: next });
   }, [persistContent]);
 
+  const saveProgramEvents = useCallback((next: ProgramEvent[]) => {
+    setProgramEvents(next);
+    void persistContent({ program_events: next });
+  }, [persistContent]);
+
+  const saveProgramProviders = useCallback((next: ProgramProvider[]) => {
+    setProgramProviders(next);
+    void persistContent({ program_providers: next });
+  }, [persistContent]);
+
   const addWeddingMoment = useCallback(() => {
     const id = `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     const moment: WeddingMoment = {
@@ -1506,6 +1548,10 @@ export default function App() {
         openWedding();
         return;
       }
+      if (target === 'programme') {
+        openProgram();
+        return;
+      }
       if (editing || weddingEditing) {
         pendingScroll.current = target;
         setEditing(false);
@@ -1515,7 +1561,7 @@ export default function App() {
         setChapter(null);
         return;
       }
-      if (chapter !== null || inWedding) {
+      if (chapter !== null || inWedding || inProgram) {
         pendingScroll.current = target;
         window.location.hash = '#/';
         setChapter(null);
@@ -1526,7 +1572,7 @@ export default function App() {
         document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' });
       }
     },
-    [chapter, editing, weddingEditing, inWedding, openWedding],
+    [chapter, editing, inProgram, weddingEditing, inWedding, openProgram, openWedding],
   );
 
   const persistRead = useCallback((next: Set<number>) => {
@@ -1609,7 +1655,7 @@ export default function App() {
         style={{ scaleX: progress }}
         aria-hidden="true"
       />
-      <Header onNav={goHome} onStart={startReading} onWedding={openWedding} inReader={chapter !== null && !editing && !inWedding} inWedding={inWedding} user={user} onAuth={() => setAuthOpen(true)} />
+      <Header onNav={goHome} onStart={startReading} onWedding={openWedding} onProgram={openProgram} inReader={chapter !== null && !editing && !inWedding && !inProgram} inWedding={inWedding} user={user} onAuth={() => setAuthOpen(true)} />
       {editing && creator && contentReady ? (
         <Editor
           chapters={chapters}
@@ -1629,6 +1675,8 @@ export default function App() {
           onClose={closeWeddingEditor}
           onPreview={previewWeddingMoment}
         />
+      ) : inProgram ? (
+        <ProgramPage events={programEvents} providers={programProviders} canEdit={creator} onEventsChange={saveProgramEvents} onProvidersChange={saveProgramProviders} />
       ) : (
         <AnimatePresence mode="wait">
           {inWedding ? (
@@ -1673,7 +1721,7 @@ export default function App() {
       )}
       {authOpen && <AuthPanel user={user} onClose={() => setAuthOpen(false)} />}
       {!authReady && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-white text-smoke">Connexion…</div>}
-      <Footer onNav={goHome} onEdit={openEditor} onWedding={openWedding} />
+      <Footer onNav={goHome} onEdit={openEditor} onWedding={openWedding} onProgram={openProgram} />
     </div>
   );
 }

@@ -2,6 +2,8 @@ create table if not exists public.site_content (
   id text primary key default 'main' check (id = 'main'),
   book_edits jsonb not null default '{}'::jsonb,
   wedding_timeline jsonb not null default '[]'::jsonb,
+  program_events jsonb not null default '[]'::jsonb,
+  program_providers jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
 );
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
 import { AnimatePresence, motion, useScroll, useSpring } from 'framer-motion';
 import {
   ArrowLeft,
@@ -23,6 +24,8 @@ import { chapterData, type Chapter } from './data/chapters';
 import { weddingDefault, isWeddingTimeline, type WeddingMoment } from './data/wedding';
 import WeddingPage from './components/WeddingPage';
 import WeddingEditor from './components/WeddingEditor';
+import AuthPanel from './components/AuthPanel';
+import { isSupabaseConfigured, supabase, type UserContent } from './lib/supabase';
 
 /* ------------------------------------------------------------------ utils */
 
@@ -171,12 +174,16 @@ function Header({
   onWedding,
   inReader,
   inWedding,
+  user,
+  onAuth,
 }: {
   onNav: (t: NavTarget) => void;
   onStart: () => void;
   onWedding: () => void;
   inReader: boolean;
   inWedding: boolean;
+  user: User | null;
+  onAuth: () => void;
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-white/92 backdrop-blur-md">
@@ -213,12 +220,17 @@ function Header({
             </button>
           </nav>
         </div>
-        <button
-          onClick={inWedding ? onWedding : inReader ? () => onNav('chapitres') : onStart}
-          className="cursor-pointer rounded-full border border-ink/70 px-5 py-2 font-display text-[13px] font-semibold tracking-[0.01em] whitespace-nowrap uppercase transition-colors hover:bg-ink hover:text-white"
-        >
-          {inWedding ? 'Voir la timeline' : inReader ? 'Sommaire' : 'Commencer la lecture'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={onAuth} className="hidden cursor-pointer rounded-full border border-ink/30 px-4 py-2 font-display text-[12px] font-semibold whitespace-nowrap uppercase transition-colors hover:bg-ink hover:text-white sm:block">
+            {user ? 'Mon compte' : 'Se connecter'}
+          </button>
+          <button
+            onClick={inWedding ? onWedding : inReader ? () => onNav('chapitres') : onStart}
+            className="cursor-pointer rounded-full border border-ink/70 px-5 py-2 font-display text-[13px] font-semibold tracking-[0.01em] whitespace-nowrap uppercase transition-colors hover:bg-ink hover:text-white"
+          >
+            {inWedding ? 'Voir la timeline' : inReader ? 'Sommaire' : 'Commencer la lecture'}
+          </button>
+        </div>
       </div>
       <nav className="flex items-center gap-5 overflow-x-auto px-5 pb-3 text-[14px] font-medium md:hidden" aria-label="Navigation mobile">
         <button onClick={() => onNav('livre')} className="shrink-0 cursor-pointer transition-colors hover:text-smoke">Le livre</button>
@@ -1277,6 +1289,10 @@ const storage = {
 };
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [contentUserId, setContentUserId] = useState<string | null>(isSupabaseConfigured ? null : 'local');
   const [chapter, setChapter] = useState<number | null>(() => parseHash());
   const [readSet, setReadSet] = useState<Set<number>>(() => {
     try {
@@ -1301,7 +1317,6 @@ export default function App() {
   });
   const [editing, setEditing] = useState(() => window.location.hash === '#/editer');
   const [weddingPreviewId, setWeddingPreviewId] = useState<string | null>(null);
-  const [weddingStorageError, setWeddingStorageError] = useState(false);
   const [weddingMoments, setWeddingMoments] = useState<WeddingMoment[]>(() => loadWeddingMoments());
   const [inWedding, setInWedding] = useState(() => {
     const r = parseRoute();
@@ -1312,6 +1327,59 @@ export default function App() {
     const r = parseRoute();
     return r.kind === 'wedding-editor' ? r.momentId : null;
   });
+
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setUser(data.session?.user ?? null);
+      setAuthReady(true);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setAuthReady(true);
+      if (!session) {
+        setContentUserId(null);
+        setEdits({});
+        setWeddingMoments(weddingDefault);
+      }
+    });
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase || !user) return;
+    let active = true;
+    supabase.from('user_content').select('book_edits, wedding_timeline').eq('user_id', user.id).maybeSingle<UserContent>().then(({ data, error }) => {
+      if (!active) return;
+      if (!error && data) {
+        setEdits(data.book_edits as Record<number, ChapterEdit>);
+        setWeddingMoments(isWeddingTimeline(data.wedding_timeline) ? data.wedding_timeline : weddingDefault);
+      }
+      setContentUserId(user.id);
+    });
+    return () => { active = false; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!authReady || user) return;
+    const route = parseRoute();
+    if (route.kind === 'editor' || route.kind === 'wedding-editor') {
+      window.location.hash = route.kind === 'editor' ? '#/' : '#/wedding';
+      setTimeout(() => setAuthOpen(true), 0);
+    }
+  }, [authReady, user]);
+
+  const persistContent = useCallback(async (patch: Partial<UserContent>) => {
+    if (!supabase || !user) return;
+    await supabase.from('user_content').upsert({
+      user_id: user.id,
+      book_edits: patch.book_edits ?? edits,
+      wedding_timeline: patch.wedding_timeline ?? weddingMoments,
+      updated_at: new Date().toISOString(),
+    });
+  }, [edits, user, weddingMoments]);
   const chapters = useMemo<EffectiveChapter[]>(
     () =>
       chapterData.map((c, i) => {
@@ -1391,6 +1459,7 @@ export default function App() {
   }, []);
 
   const openWeddingEditor = useCallback((momentId?: string | null) => {
+    if (!user) { setAuthOpen(true); return; }
     window.location.hash = momentId ? `#/wedding/editer/${encodeURIComponent(momentId)}` : '#/wedding/editer';
     setInWedding(true);
     setWeddingEditing(true);
@@ -1398,7 +1467,7 @@ export default function App() {
     setEditing(false);
     setChapter(null);
     window.scrollTo({ top: 0 });
-  }, []);
+  }, [user]);
 
   const closeWeddingEditor = useCallback(() => {
     window.location.hash = '#/wedding';
@@ -1416,13 +1485,8 @@ export default function App() {
 
   const saveWeddingMoments = useCallback((next: WeddingMoment[]) => {
     setWeddingMoments(next);
-    try {
-      window.localStorage.setItem('souffle-wedding-v1', JSON.stringify(next));
-      setWeddingStorageError(false);
-    } catch {
-      setWeddingStorageError(true);
-    }
-  }, []);
+    void persistContent({ wedding_timeline: next });
+  }, [persistContent]);
 
   const addWeddingMoment = useCallback(() => {
     const id = `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -1502,12 +1566,13 @@ export default function App() {
 
   /* ----- éditeur ----- */
   const openEditor = useCallback(() => {
+    if (!user) { setAuthOpen(true); return; }
     window.location.hash = '#/editer';
     setEditing(true);
     setInWedding(false);
     setWeddingEditing(false);
     window.scrollTo({ top: 0 });
-  }, []);
+  }, [user]);
   const closeEditor = useCallback(() => {
     setEditing(false);
     window.location.hash = chapter !== null ? `#/chapitre/${chapter + 1}` : '#/';
@@ -1523,22 +1588,22 @@ export default function App() {
   const saveEdit = useCallback((i: number, edit: ChapterEdit) => {
     setEdits((prev) => {
       const next = { ...prev, [i]: edit };
-      storage.set('souffle-edits-v1', JSON.stringify(next));
+      void persistContent({ book_edits: next });
       return next;
     });
-  }, []);
+  }, [persistContent]);
   const resetChapter = useCallback((i: number) => {
     setEdits((prev) => {
       const next = { ...prev };
       delete next[i];
-      storage.set('souffle-edits-v1', JSON.stringify(next));
+      void persistContent({ book_edits: next });
       return next;
     });
-  }, []);
+  }, [persistContent]);
   const resetAllEdits = useCallback(() => {
     setEdits({});
-    storage.set('souffle-edits-v1', '{}');
-  }, []);
+    void persistContent({ book_edits: {} });
+  }, [persistContent]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -1548,13 +1613,8 @@ export default function App() {
         style={{ scaleX: progress }}
         aria-hidden="true"
       />
-      <Header onNav={goHome} onStart={startReading} onWedding={openWedding} inReader={chapter !== null && !editing && !inWedding} inWedding={inWedding} />
-      {weddingStorageError && inWedding && (
-        <div role="alert" className="bg-amber-100 px-5 py-3 text-center text-sm text-amber-950">
-          La sauvegarde dans ce navigateur a échoué. Vos modifications restent visibles pendant cette session : exportez-les en JSON depuis l’éditeur, puis utilisez des images plus légères ou des URL.
-        </div>
-      )}
-      {editing ? (
+      <Header onNav={goHome} onStart={startReading} onWedding={openWedding} inReader={chapter !== null && !editing && !inWedding} inWedding={inWedding} user={user} onAuth={() => setAuthOpen(true)} />
+      {editing && user && contentUserId === user.id ? (
         <Editor
           chapters={chapters}
           edits={edits}
@@ -1564,7 +1624,7 @@ export default function App() {
           onClose={closeEditor}
           onPreview={previewChapter}
         />
-      ) : weddingEditing ? (
+      ) : weddingEditing && user && contentUserId === user.id ? (
         <WeddingEditor
           moments={weddingMoments}
           initialId={weddingEditId}
@@ -1615,6 +1675,8 @@ export default function App() {
           )}
         </AnimatePresence>
       )}
+      {authOpen && <AuthPanel user={user} onClose={() => setAuthOpen(false)} />}
+      {!authReady && <div className="fixed inset-0 z-[90] flex items-center justify-center bg-white text-smoke">Connexion…</div>}
       <Footer onNav={goHome} onEdit={openEditor} onWedding={openWedding} />
     </div>
   );

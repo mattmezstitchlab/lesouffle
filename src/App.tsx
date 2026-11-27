@@ -20,6 +20,9 @@ import {
   X,
 } from 'lucide-react';
 import { chapterData, type Chapter } from './data/chapters';
+import { weddingDefault, isWeddingTimeline, type WeddingMoment } from './data/wedding';
+import WeddingPage from './components/WeddingPage';
+import WeddingEditor from './components/WeddingEditor';
 
 /* ------------------------------------------------------------------ utils */
 
@@ -34,9 +37,6 @@ const excerptOf = (c: Chapter) => {
   const t = c.body[0];
   return t.length > 150 ? `${t.slice(0, 150).trimEnd()}…` : t;
 };
-
-const TOTAL_WORDS = chapterData.reduce((s, c) => s + wordCount(c), 0);
-const TOTAL_MINUTES = Math.round(TOTAL_WORDS / 190);
 
 /* ----------------------------------------------------- édition du livre */
 
@@ -163,16 +163,20 @@ function SplitTitle({ text, className = '' }: { text: string; className?: string
 
 /* ----------------------------------------------------------------- header */
 
-type NavTarget = 'top' | 'livre' | 'chapitres';
+type NavTarget = 'top' | 'livre' | 'chapitres' | 'wedding';
 
 function Header({
   onNav,
   onStart,
+  onWedding,
   inReader,
+  inWedding,
 }: {
   onNav: (t: NavTarget) => void;
   onStart: () => void;
+  onWedding: () => void;
   inReader: boolean;
+  inWedding: boolean;
 }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-white/92 backdrop-blur-md">
@@ -200,15 +204,28 @@ function Header({
             <button onClick={onStart} className="cursor-pointer transition-colors hover:text-smoke">
               Lire
             </button>
+            <button
+              onClick={onWedding}
+              aria-current={inWedding ? 'page' : undefined}
+              className={`cursor-pointer transition-colors hover:text-smoke ${inWedding ? 'font-bold text-ink underline decoration-2 underline-offset-4' : ''}`}
+            >
+              Wedding Party
+            </button>
           </nav>
         </div>
         <button
-          onClick={inReader ? () => onNav('chapitres') : onStart}
+          onClick={inWedding ? onWedding : inReader ? () => onNav('chapitres') : onStart}
           className="cursor-pointer rounded-full border border-ink/70 px-5 py-2 font-display text-[13px] font-semibold tracking-[0.01em] whitespace-nowrap uppercase transition-colors hover:bg-ink hover:text-white"
         >
-          {inReader ? 'Sommaire' : 'Commencer la lecture'}
+          {inWedding ? 'Voir la timeline' : inReader ? 'Sommaire' : 'Commencer la lecture'}
         </button>
       </div>
+      <nav className="flex items-center gap-5 overflow-x-auto px-5 pb-3 text-[14px] font-medium md:hidden" aria-label="Navigation mobile">
+        <button onClick={() => onNav('livre')} className="shrink-0 cursor-pointer transition-colors hover:text-smoke">Le livre</button>
+        <button onClick={() => onNav('chapitres')} className="shrink-0 cursor-pointer transition-colors hover:text-smoke">Chapitres</button>
+        <button onClick={onStart} className="shrink-0 cursor-pointer transition-colors hover:text-smoke">Lire</button>
+        <button onClick={onWedding} aria-current={inWedding ? 'page' : undefined} className={`shrink-0 cursor-pointer transition-colors hover:text-smoke ${inWedding ? 'font-bold underline decoration-2 underline-offset-4' : ''}`}>Wedding Party</button>
+      </nav>
     </header>
   );
 }
@@ -950,14 +967,6 @@ function Editor({
   );
   const [draft, setDraft] = useState(() => makeDraft(0));
 
-  useEffect(() => {
-    setDraft(makeDraft(selected));
-    setNotice('');
-    // uniquement au changement de chapitre : ne pas effacer le brouillon
-    // ni le message de confirmation après un enregistrement
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected]);
-
   const originalDraft = (i: number) => ({
     title: chapterData[i].title,
     theme: chapterData[i].theme,
@@ -1048,7 +1057,7 @@ function Editor({
             {chapters.map((c, i) => (
               <button
                 key={i}
-                onClick={() => setSelected(i)}
+                onClick={() => { setSelected(i); setDraft(makeDraft(i)); setNotice(''); }}
                 aria-current={i === selected}
                 className={`flex w-full cursor-pointer items-center gap-3 border-b border-line px-4 py-3 text-left last:border-b-0 ${i === selected ? 'bg-ink text-white' : 'hover:bg-mist'}`}
               >
@@ -1164,7 +1173,7 @@ function Editor({
 
 /* ---------------------------------------------------------------- footer */
 
-function Footer({ onNav, onEdit }: { onNav: (t: NavTarget) => void; onEdit: () => void }) {
+function Footer({ onNav, onEdit, onWedding }: { onNav: (t: NavTarget) => void; onEdit: () => void; onWedding: () => void }) {
   return (
     <footer className="border-t border-line">
       <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-5 px-5 py-8 md:px-10">
@@ -1180,6 +1189,12 @@ function Footer({ onNav, onEdit }: { onNav: (t: NavTarget) => void; onEdit: () =
           <span className="hidden font-display text-[11px] font-semibold tracking-[0.08em] text-smoke uppercase md:block">
             Une voix · Un souffle · Un voyage
           </span>
+          <button
+            onClick={onWedding}
+            className="flex cursor-pointer items-center gap-2 rounded-full border border-line px-4 py-2 font-display text-[12px] font-semibold tracking-[0.04em] uppercase transition-colors hover:border-ink"
+          >
+            Wedding Party
+          </button>
           <button
             onClick={onEdit}
             className="flex cursor-pointer items-center gap-2 rounded-full border border-line px-4 py-2 font-display text-[12px] font-semibold tracking-[0.04em] uppercase transition-colors hover:border-ink"
@@ -1205,6 +1220,39 @@ function parseHash(): number | null {
   if (!m) return null;
   const n = parseInt(m[1], 10);
   return n >= 1 && n <= chapterData.length ? n - 1 : null;
+}
+
+type Route =
+  | { kind: 'home' }
+  | { kind: 'chapter'; index: number }
+  | { kind: 'editor' }
+  | { kind: 'wedding' }
+  | { kind: 'wedding-editor'; momentId: string | null };
+
+function parseRoute(): Route {
+  const h = window.location.hash;
+  if (h === '#/editer') return { kind: 'editor' };
+  if (h === '#/wedding' || h === '#/wedding-party') return { kind: 'wedding' };
+  if (h === '#/wedding/editer' || h === '#/editer-wedding') return { kind: 'wedding-editor', momentId: null };
+  const wm = h.match(/^#\/wedding\/editer\/(.+)$/);
+  if (wm) {
+    try { return { kind: 'wedding-editor', momentId: decodeURIComponent(wm[1]) }; }
+    catch { return { kind: 'wedding-editor', momentId: null }; }
+  }
+  const ch = parseHash();
+  if (ch !== null) return { kind: 'chapter', index: ch };
+  return { kind: 'home' };
+}
+
+function loadWeddingMoments(): WeddingMoment[] {
+  try {
+    const raw = storage.get('souffle-wedding-v1');
+    if (!raw) return weddingDefault;
+    const parsed: unknown = JSON.parse(raw);
+    return isWeddingTimeline(parsed) ? parsed : weddingDefault;
+  } catch {
+    return weddingDefault;
+  }
 }
 
 /* Accès au stockage toujours protégé : dans une iframe sandboxée, en
@@ -1252,6 +1300,18 @@ export default function App() {
     }
   });
   const [editing, setEditing] = useState(() => window.location.hash === '#/editer');
+  const [weddingPreviewId, setWeddingPreviewId] = useState<string | null>(null);
+  const [weddingStorageError, setWeddingStorageError] = useState(false);
+  const [weddingMoments, setWeddingMoments] = useState<WeddingMoment[]>(() => loadWeddingMoments());
+  const [inWedding, setInWedding] = useState(() => {
+    const r = parseRoute();
+    return r.kind === 'wedding' || r.kind === 'wedding-editor';
+  });
+  const [weddingEditing, setWeddingEditing] = useState(() => parseRoute().kind === 'wedding-editor');
+  const [weddingEditId, setWeddingEditId] = useState<string | null>(() => {
+    const r = parseRoute();
+    return r.kind === 'wedding-editor' ? r.momentId : null;
+  });
   const chapters = useMemo<EffectiveChapter[]>(
     () =>
       chapterData.map((c, i) => {
@@ -1276,22 +1336,27 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      if (window.location.hash === '#/editer') setEditing(true);
-      else {
-        setEditing(false);
-        setChapter(parseHash());
-      }
+      const r = parseRoute();
+      setEditing(r.kind === 'editor');
+      setWeddingEditing(r.kind === 'wedding-editor');
+      setWeddingEditId(r.kind === 'wedding-editor' ? r.momentId : null);
+      setInWedding(r.kind === 'wedding' || r.kind === 'wedding-editor');
+      setChapter(r.kind === 'chapter' ? r.index : null);
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
   useEffect(() => {
-    document.title = editing
-      ? 'Éditer — Le souffle en voyage, Matt Mez'
-      : chapter === null
-        ? 'Le souffle en voyage — Matt Mez'
-        : `${chapters[chapter].title} — Le souffle en voyage, Matt Mez`;
+    document.title = weddingEditing
+      ? 'Éditer la timeline — Wedding Party, Matt Mez'
+      : editing
+        ? 'Éditer — Le souffle en voyage, Matt Mez'
+        : inWedding
+          ? 'Wedding Party — Timeline Jour-J, Matt Mez'
+          : chapter === null
+            ? 'Le souffle en voyage — Matt Mez'
+            : `${chapters[chapter].title} — Le souffle en voyage, Matt Mez`;
     if (pendingScroll.current) {
       const target = pendingScroll.current;
       pendingScroll.current = null;
@@ -1299,41 +1364,109 @@ export default function App() {
         if (target === 'top') window.scrollTo({ top: 0, behavior: 'smooth' });
         else document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' });
       });
-    } else if (!editing) {
+    } else if (!editing && !weddingEditing) {
       window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chapter, editing]);
+  }, [chapter, editing, inWedding, weddingEditing]);
 
   const openChapter = useCallback((i: number) => {
     window.location.hash = `#/chapitre/${i + 1}`;
     setChapter(i);
+    setInWedding(false);
+    setWeddingEditing(false);
+    setEditing(false);
     setLastRead(i);
     storage.set('souffle-last-v1', String(i));
   }, []);
 
+  const openWedding = useCallback(() => {
+    setWeddingPreviewId(null);
+    window.location.hash = '#/wedding';
+    setInWedding(true);
+    setWeddingEditing(false);
+    setEditing(false);
+    setChapter(null);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const openWeddingEditor = useCallback((momentId?: string | null) => {
+    window.location.hash = momentId ? `#/wedding/editer/${encodeURIComponent(momentId)}` : '#/wedding/editer';
+    setInWedding(true);
+    setWeddingEditing(true);
+    setWeddingEditId(momentId ?? null);
+    setEditing(false);
+    setChapter(null);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const closeWeddingEditor = useCallback(() => {
+    window.location.hash = '#/wedding';
+    setWeddingEditing(false);
+    setInWedding(true);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const previewWeddingMoment = useCallback((id: string) => {
+    setWeddingPreviewId(id);
+    window.location.hash = '#/wedding';
+    setWeddingEditing(false);
+    setInWedding(true);
+  }, []);
+
+  const saveWeddingMoments = useCallback((next: WeddingMoment[]) => {
+    setWeddingMoments(next);
+    try {
+      window.localStorage.setItem('souffle-wedding-v1', JSON.stringify(next));
+      setWeddingStorageError(false);
+    } catch {
+      setWeddingStorageError(true);
+    }
+  }, []);
+
+  const addWeddingMoment = useCallback(() => {
+    const id = `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+    const moment: WeddingMoment = {
+      id, time: '18:00', endTime: '19:00', title: 'Nouveau moment', phase: 'Réception',
+      location: 'À définir', description: 'Décrivez ce moment du mariage…', ambiance: '', music: '',
+      dressCode: '', guests: '', contact: '', checklist: [], notes: '',
+      image: '/images/wedding/01.jpg', imageAlt: 'Visuel pop du moment', accent: 'pink',
+    };
+    saveWeddingMoments([...weddingMoments, moment]);
+    openWeddingEditor(id);
+  }, [openWeddingEditor, saveWeddingMoments, weddingMoments]);
+
+  const resetWeddingMoments = useCallback(() => {
+    saveWeddingMoments(weddingDefault);
+  }, [saveWeddingMoments]);
+
   const goHome = useCallback(
     (target: NavTarget) => {
-      if (editing) {
-        pendingScroll.current = target;
-        setEditing(false);
-        if (chapter !== null) {
-          window.location.hash = '#/';
-          setChapter(null);
-        }
+      if (target === 'wedding') {
+        openWedding();
         return;
       }
-      if (chapter !== null) {
+      if (editing || weddingEditing) {
+        pendingScroll.current = target;
+        setEditing(false);
+        setWeddingEditing(false);
+        setInWedding(false);
+        window.location.hash = '#/';
+        setChapter(null);
+        return;
+      }
+      if (chapter !== null || inWedding) {
         pendingScroll.current = target;
         window.location.hash = '#/';
         setChapter(null);
+        setInWedding(false);
       } else if (target === 'top') {
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         document.getElementById(target)?.scrollIntoView({ behavior: 'smooth' });
       }
     },
-    [chapter, editing],
+    [chapter, editing, weddingEditing, inWedding, openWedding],
   );
 
   const persistRead = useCallback((next: Set<number>) => {
@@ -1371,6 +1504,8 @@ export default function App() {
   const openEditor = useCallback(() => {
     window.location.hash = '#/editer';
     setEditing(true);
+    setInWedding(false);
+    setWeddingEditing(false);
     window.scrollTo({ top: 0 });
   }, []);
   const closeEditor = useCallback(() => {
@@ -1413,7 +1548,12 @@ export default function App() {
         style={{ scaleX: progress }}
         aria-hidden="true"
       />
-      <Header onNav={goHome} onStart={startReading} inReader={chapter !== null && !editing} />
+      <Header onNav={goHome} onStart={startReading} onWedding={openWedding} inReader={chapter !== null && !editing && !inWedding} inWedding={inWedding} />
+      {weddingStorageError && inWedding && (
+        <div role="alert" className="bg-amber-100 px-5 py-3 text-center text-sm text-amber-950">
+          La sauvegarde dans ce navigateur a échoué. Vos modifications restent visibles pendant cette session : exportez-les en JSON depuis l’éditeur, puis utilisez des images plus légères ou des URL.
+        </div>
+      )}
       {editing ? (
         <Editor
           chapters={chapters}
@@ -1424,9 +1564,34 @@ export default function App() {
           onClose={closeEditor}
           onPreview={previewChapter}
         />
+      ) : weddingEditing ? (
+        <WeddingEditor
+          moments={weddingMoments}
+          initialId={weddingEditId}
+          onSave={saveWeddingMoments}
+          onReset={resetWeddingMoments}
+          onClose={closeWeddingEditor}
+          onPreview={previewWeddingMoment}
+        />
       ) : (
         <AnimatePresence mode="wait">
-          {chapter === null ? (
+          {inWedding ? (
+            <motion.div
+              key="wedding"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35 }}
+            >
+              <WeddingPage
+                moments={weddingMoments}
+                previewId={weddingPreviewId}
+                onEditMoment={(id) => openWeddingEditor(id)}
+                onEditTimeline={() => openWeddingEditor(null)}
+                onAddMoment={addWeddingMoment}
+              />
+            </motion.div>
+          ) : chapter === null ? (
             <motion.div
               key="home"
               initial={{ opacity: 0 }}
@@ -1450,7 +1615,7 @@ export default function App() {
           )}
         </AnimatePresence>
       )}
-      <Footer onNav={goHome} onEdit={openEditor} />
+      <Footer onNav={goHome} onEdit={openEditor} onWedding={openWedding} />
     </div>
   );
 }

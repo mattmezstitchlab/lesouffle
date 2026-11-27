@@ -1247,12 +1247,24 @@ type Route =
   | { kind: 'editor' }
   | { kind: 'wedding' }
   | { kind: 'programme' }
+  | { kind: 'programme-event'; id: string }
+  | { kind: 'programme-provider'; id: string }
   | { kind: 'wedding-editor'; momentId: string | null };
 
 function parseRoute(): Route {
   const h = window.location.hash;
   if (h === '#/editer') return { kind: 'editor' };
   if (h === '#/wedding' || h === '#/wedding-party') return { kind: 'wedding' };
+  const pe = h.match(/^#\/programme\/event\/([^/]+)$/);
+  if (pe) {
+    try { return { kind: 'programme-event', id: decodeURIComponent(pe[1]) }; }
+    catch { return { kind: 'programme-event', id: pe[1] }; }
+  }
+  const pp = h.match(/^#\/programme\/prestataire\/([^/]+)$/);
+  if (pp) {
+    try { return { kind: 'programme-provider', id: decodeURIComponent(pp[1]) }; }
+    catch { return { kind: 'programme-provider', id: pp[1] }; }
+  }
   if (h === '#/programme') return { kind: 'programme' };
   if (h === '#/wedding/editer' || h === '#/editer-wedding') return { kind: 'wedding-editor', momentId: null };
   const wm = h.match(/^#\/wedding\/editer\/(.+)$/);
@@ -1329,7 +1341,11 @@ export default function App() {
   const [weddingMoments, setWeddingMoments] = useState<WeddingMoment[]>(() => loadWeddingMoments());
   const [programEvents, setProgramEvents] = useState<ProgramEvent[]>(programDefaultEvents);
   const [programProviders, setProgramProviders] = useState<ProgramProvider[]>(programDefaultProviders);
-  const [inProgram, setInProgram] = useState(() => parseRoute().kind === 'programme');
+  const [programDetail, setProgramDetail] = useState<{ type: 'event' | 'provider'; id: string } | null>(() => {
+    const route = parseRoute();
+    return route.kind === 'programme-event' ? { type: 'event', id: route.id } : route.kind === 'programme-provider' ? { type: 'provider', id: route.id } : null;
+  });
+  const [inProgram, setInProgram] = useState(() => ['programme', 'programme-event', 'programme-provider'].includes(parseRoute().kind));
   const [inWedding, setInWedding] = useState(() => {
     const r = parseRoute();
     return r.kind === 'wedding' || r.kind === 'wedding-editor';
@@ -1421,7 +1437,8 @@ export default function App() {
       setWeddingEditing(r.kind === 'wedding-editor');
       setWeddingEditId(r.kind === 'wedding-editor' ? r.momentId : null);
       setInWedding(r.kind === 'wedding' || r.kind === 'wedding-editor');
-      setInProgram(r.kind === 'programme');
+      setInProgram(['programme', 'programme-event', 'programme-provider'].includes(r.kind));
+      setProgramDetail(r.kind === 'programme-event' ? { type: 'event', id: r.id } : r.kind === 'programme-provider' ? { type: 'provider', id: r.id } : null);
       setChapter(r.kind === 'chapter' ? r.index : null);
     };
     window.addEventListener('hashchange', onHash);
@@ -1477,6 +1494,7 @@ export default function App() {
 
   const openProgram = useCallback(() => {
     window.location.hash = '#/programme';
+    setProgramDetail(null);
     setInProgram(true);
     setInWedding(false);
     setWeddingEditing(false);
@@ -1676,7 +1694,7 @@ export default function App() {
           onPreview={previewWeddingMoment}
         />
       ) : inProgram ? (
-        <ProgramPage events={programEvents} providers={programProviders} canEdit={creator} onEventsChange={saveProgramEvents} onProvidersChange={saveProgramProviders} />
+        <ProgramPage events={programEvents} providers={programProviders} detail={programDetail} canEdit={creator} onEventsChange={saveProgramEvents} onProvidersChange={saveProgramProviders} onOpenDetail={(type, id) => { window.location.hash = `#/programme/${type === 'event' ? 'event' : 'prestataire'}/${encodeURIComponent(id)}`; }} onBack={openProgram} />
       ) : (
         <AnimatePresence mode="wait">
           {inWedding ? (

@@ -5,10 +5,12 @@ import { isCreator, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export default function AuthPanel({ user, onClose }: { user: User | null; onClose?: () => void }) {
   const [email, setEmail] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [token, setToken] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const signIn = async (event: FormEvent) => {
+  const sendCode = async (event: FormEvent) => {
     event.preventDefault();
     if (!supabase || !email.trim()) return;
     setBusy(true);
@@ -18,7 +20,26 @@ export default function AuthPanel({ user, onClose }: { user: User | null; onClos
       options: { emailRedirectTo: window.location.origin },
     });
     setBusy(false);
-    setMessage(error ? error.message : 'Un lien de connexion vient d’être envoyé à cette adresse.');
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    setCodeSent(true);
+    setMessage('Un code à 6 chiffres vient d’être envoyé à cette adresse.');
+  };
+
+  const verifyCode = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase || !email.trim() || token.trim().length !== 6) return;
+    setBusy(true);
+    setMessage('');
+    const { error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token: token.trim(),
+      type: 'email',
+    });
+    setBusy(false);
+    setMessage(error ? error.message : 'Connexion réussie.');
   };
 
   if (user) {
@@ -48,12 +69,29 @@ export default function AuthPanel({ user, onClose }: { user: User | null; onClos
         <p className="mb-2 font-display text-[12px] font-semibold tracking-[0.12em] text-smoke uppercase">Espace privé</p>
         <h2 className="mb-3 font-display text-3xl font-bold tracking-[-0.04em]">Connectez-vous pour modifier</h2>
         <p className="mb-6 text-sm leading-6 text-smoke">Vos modifications du livre et de la timeline seront liées à votre compte et disponibles sur vos autres appareils.</p>
-        <form onSubmit={signIn} className="space-y-3">
+        <form onSubmit={codeSent ? verifyCode : sendCode} className="space-y-3">
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="votre@email.com" className="w-full rounded-full border border-line px-4 py-3 outline-none focus:border-ink" />
+          {codeSent && (
+            <input
+              type="text"
+              required
+              autoFocus
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              minLength={6}
+              maxLength={6}
+              value={token}
+              onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
+              placeholder="Code à 6 chiffres"
+              className="w-full rounded-full border border-line px-4 py-3 text-center tracking-[0.3em] outline-none focus:border-ink"
+            />
+          )}
           <button disabled={busy} className="w-full cursor-pointer rounded-full bg-ink px-5 py-3 font-display text-sm font-semibold text-white uppercase disabled:cursor-wait disabled:opacity-50">
-            {busy ? 'Envoi…' : 'Recevoir mon lien de connexion'}
+            {busy ? (codeSent ? 'Vérification…' : 'Envoi…') : codeSent ? 'Valider le code' : 'Recevoir mon code de connexion'}
           </button>
         </form>
+        {codeSent && <button type="button" onClick={() => { setCodeSent(false); setToken(''); setMessage(''); }} className="mt-3 w-full cursor-pointer text-sm text-smoke underline">Changer d’adresse</button>}
         {message && <p className="mt-4 text-sm text-smoke">{message}</p>}
       </div>
     </div>

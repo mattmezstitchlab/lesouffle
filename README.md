@@ -8,7 +8,7 @@ Les éditeurs du livre et de la timeline Wedding Party sont réservés au compte
 2. Copier [`.env.example`](.env.example) en `.env.local` et renseigner `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`.
 3. Dans Supabase, configurer l’URL du site dans **Authentication → URL Configuration** pour que le lien magique revienne vers le domaine de production et les environnements de preview.
 
-La clé utilisée côté navigateur doit être la clé `anon`/publique. La sécurité des données repose sur les policies RLS du schéma : chaque utilisateur ne peut lire et modifier que sa propre ligne.
+La clé utilisée côté navigateur doit être la clé `anon`/publique. Le contenu publié est lisible par les visiteurs, mais les policies RLS n’autorisent l’écriture qu’au compte créateur.
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 

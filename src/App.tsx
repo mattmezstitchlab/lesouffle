@@ -1292,7 +1292,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
   const [authOpen, setAuthOpen] = useState(false);
-  const [contentUserId, setContentUserId] = useState<string | null>(isSupabaseConfigured ? null : 'local');
+  const [contentReady, setContentReady] = useState(!isSupabaseConfigured);
   const [chapter, setChapter] = useState<number | null>(() => parseHash());
   const [readSet, setReadSet] = useState<Set<number>>(() => {
     try {
@@ -1340,25 +1340,20 @@ export default function App() {
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setAuthReady(true);
-      if (!session) {
-        setContentUserId(null);
-        setEdits({});
-        setWeddingMoments(weddingDefault);
-      }
     });
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
 
   useEffect(() => {
-    if (!supabase || !user) return;
+    if (!supabase) return;
     let active = true;
-    supabase.from('user_content').select('book_edits, wedding_timeline').eq('user_id', user.id).maybeSingle<UserContent>().then(({ data, error }) => {
+    supabase.from('site_content').select('book_edits, wedding_timeline').eq('id', 'main').maybeSingle<UserContent>().then(({ data, error }) => {
       if (!active) return;
       if (!error && data) {
         setEdits(data.book_edits as Record<number, ChapterEdit>);
         setWeddingMoments(isWeddingTimeline(data.wedding_timeline) ? data.wedding_timeline : weddingDefault);
       }
-      setContentUserId(user.id);
+      setContentReady(true);
     });
     return () => { active = false; };
   }, [user]);
@@ -1374,8 +1369,8 @@ export default function App() {
 
   const persistContent = useCallback(async (patch: Partial<UserContent>) => {
     if (!supabase || !user || !creator) return;
-    await supabase.from('user_content').upsert({
-      user_id: user.id,
+    await supabase.from('site_content').upsert({
+      id: 'main',
       book_edits: patch.book_edits ?? edits,
       wedding_timeline: patch.wedding_timeline ?? weddingMoments,
       updated_at: new Date().toISOString(),
@@ -1615,7 +1610,7 @@ export default function App() {
         aria-hidden="true"
       />
       <Header onNav={goHome} onStart={startReading} onWedding={openWedding} inReader={chapter !== null && !editing && !inWedding} inWedding={inWedding} user={user} onAuth={() => setAuthOpen(true)} />
-      {editing && creator && contentUserId === user?.id ? (
+      {editing && creator && contentReady ? (
         <Editor
           chapters={chapters}
           edits={edits}
@@ -1625,7 +1620,7 @@ export default function App() {
           onClose={closeEditor}
           onPreview={previewChapter}
         />
-      ) : weddingEditing && creator && contentUserId === user?.id ? (
+      ) : weddingEditing && creator && contentReady ? (
         <WeddingEditor
           moments={weddingMoments}
           initialId={weddingEditId}

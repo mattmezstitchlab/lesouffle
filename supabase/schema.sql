@@ -1,25 +1,25 @@
-create table if not exists public.user_content (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+create table if not exists public.site_content (
+  id text primary key default 'main' check (id = 'main'),
   book_edits jsonb not null default '{}'::jsonb,
   wedding_timeline jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
 );
 
-alter table public.user_content enable row level security;
+alter table public.site_content enable row level security;
 
-drop policy if exists "Users can read their own content" on public.user_content;
-drop policy if exists "Users can insert their own content" on public.user_content;
-drop policy if exists "Users can update their own content" on public.user_content;
+drop policy if exists "Public can read site content" on public.site_content;
+drop policy if exists "Creator can insert site content" on public.site_content;
+drop policy if exists "Creator can update site content" on public.site_content;
 
-create policy "Creator can read content"
-  on public.user_content for select using (auth.uid() = user_id);
-create policy "Creator can insert content"
-  on public.user_content for insert with check (
-    auth.uid() = user_id and lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
+create policy "Public can read site content"
+  on public.site_content for select using (true);
+create policy "Creator can insert site content"
+  on public.site_content for insert with check (
+    lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
   );
-create policy "Creator can update content"
-  on public.user_content for update using (
-    auth.uid() = user_id and lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
+create policy "Creator can update site content"
+  on public.site_content for update using (
+    lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
   ) with check (
-    auth.uid() = user_id and lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
+    lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
   );

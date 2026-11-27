@@ -7,9 +7,19 @@ create table if not exists public.user_content (
 
 alter table public.user_content enable row level security;
 
-create policy "Users can read their own content"
+drop policy if exists "Users can read their own content" on public.user_content;
+drop policy if exists "Users can insert their own content" on public.user_content;
+drop policy if exists "Users can update their own content" on public.user_content;
+
+create policy "Creator can read content"
   on public.user_content for select using (auth.uid() = user_id);
-create policy "Users can insert their own content"
-  on public.user_content for insert with check (auth.uid() = user_id);
-create policy "Users can update their own content"
-  on public.user_content for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "Creator can insert content"
+  on public.user_content for insert with check (
+    auth.uid() = user_id and lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
+  );
+create policy "Creator can update content"
+  on public.user_content for update using (
+    auth.uid() = user_id and lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
+  ) with check (
+    auth.uid() = user_id and lower(auth.jwt() ->> 'email') = 'matthieu.lecointre@gmail.com'
+  );

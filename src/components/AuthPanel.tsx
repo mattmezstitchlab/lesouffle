@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { LogIn, LogOut, X } from 'lucide-react';
 import type { User } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { isCreator, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 export default function AuthPanel({ user, onClose }: { user: User | null; onClose?: () => void }) {
   const [email, setEmail] = useState('');
@@ -23,8 +23,9 @@ export default function AuthPanel({ user, onClose }: { user: User | null; onClos
 
   if (user) {
     return (
-      <div className="flex items-center gap-3 text-[12px]">
+      <div className="flex max-w-[320px] items-center gap-3 text-[12px]">
         <span className="hidden max-w-[180px] truncate text-smoke sm:block">{user.email}</span>
+        {!isCreator(user) && <span className="hidden text-amber-700 sm:block">Seul le compte créateur peut modifier</span>}
         <button
           onClick={() => supabase?.auth.signOut()}
           className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink/30 px-3 py-1.5 font-semibold uppercase transition-colors hover:bg-ink hover:text-white"

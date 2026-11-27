@@ -2,7 +2,7 @@
 
 ## Authentification et sauvegarde des éditions
 
-Les éditeurs du livre et de la timeline Wedding Party sont réservés aux utilisateurs connectés. La connexion se fait par lien magique envoyé par email et les modifications sont stockées par compte Supabase afin d’être retrouvées sur un autre appareil.
+Les éditeurs du livre et de la timeline Wedding Party sont réservés au compte créateur `matthieu.lecointre@gmail.com`. La connexion se fait par lien magique envoyé par email et les modifications sont stockées par compte Supabase afin d’être retrouvées sur un autre appareil.
 
 1. Créer un projet Supabase et exécuter [`supabase/schema.sql`](supabase/schema.sql) dans le SQL Editor.
 2. Copier [`.env.example`](.env.example) en `.env.local` et renseigner `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`.

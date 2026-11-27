@@ -8,6 +8,11 @@ export const supabase = supabaseUrl && supabaseAnonKey
   : null;
 
 export const isSupabaseConfigured = Boolean(supabase);
+export const CREATOR_EMAIL = 'matthieu.lecointre@gmail.com';
+
+export function isCreator(user: { email?: string | null } | null): boolean {
+  return user?.email?.trim().toLowerCase() === CREATOR_EMAIL;
+}
 
 export interface UserContent {
   book_edits: Record<number, unknown>;

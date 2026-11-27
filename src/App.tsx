@@ -25,7 +25,7 @@ import { weddingDefault, isWeddingTimeline, type WeddingMoment } from './data/we
 import WeddingPage from './components/WeddingPage';
 import WeddingEditor from './components/WeddingEditor';
 import AuthPanel from './components/AuthPanel';
-import { isSupabaseConfigured, supabase, type UserContent } from './lib/supabase';
+import { isCreator, isSupabaseConfigured, supabase, type UserContent } from './lib/supabase';
 
 /* ------------------------------------------------------------------ utils */
 
@@ -1327,6 +1327,7 @@ export default function App() {
     const r = parseRoute();
     return r.kind === 'wedding-editor' ? r.momentId : null;
   });
+  const creator = isCreator(user);
 
   useEffect(() => {
     if (!supabase) return;
@@ -1363,23 +1364,23 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (!authReady || user) return;
+    if (!authReady || creator) return;
     const route = parseRoute();
     if (route.kind === 'editor' || route.kind === 'wedding-editor') {
       window.location.hash = route.kind === 'editor' ? '#/' : '#/wedding';
       setTimeout(() => setAuthOpen(true), 0);
     }
-  }, [authReady, user]);
+  }, [authReady, creator]);
 
   const persistContent = useCallback(async (patch: Partial<UserContent>) => {
-    if (!supabase || !user) return;
+    if (!supabase || !user || !creator) return;
     await supabase.from('user_content').upsert({
       user_id: user.id,
       book_edits: patch.book_edits ?? edits,
       wedding_timeline: patch.wedding_timeline ?? weddingMoments,
       updated_at: new Date().toISOString(),
     });
-  }, [edits, user, weddingMoments]);
+  }, [creator, edits, user, weddingMoments]);
   const chapters = useMemo<EffectiveChapter[]>(
     () =>
       chapterData.map((c, i) => {
@@ -1459,7 +1460,7 @@ export default function App() {
   }, []);
 
   const openWeddingEditor = useCallback((momentId?: string | null) => {
-    if (!user) { setAuthOpen(true); return; }
+    if (!creator) { setAuthOpen(true); return; }
     window.location.hash = momentId ? `#/wedding/editer/${encodeURIComponent(momentId)}` : '#/wedding/editer';
     setInWedding(true);
     setWeddingEditing(true);
@@ -1467,7 +1468,7 @@ export default function App() {
     setEditing(false);
     setChapter(null);
     window.scrollTo({ top: 0 });
-  }, [user]);
+  }, [creator]);
 
   const closeWeddingEditor = useCallback(() => {
     window.location.hash = '#/wedding';
@@ -1566,13 +1567,13 @@ export default function App() {
 
   /* ----- éditeur ----- */
   const openEditor = useCallback(() => {
-    if (!user) { setAuthOpen(true); return; }
+    if (!creator) { setAuthOpen(true); return; }
     window.location.hash = '#/editer';
     setEditing(true);
     setInWedding(false);
     setWeddingEditing(false);
     window.scrollTo({ top: 0 });
-  }, [user]);
+  }, [creator]);
   const closeEditor = useCallback(() => {
     setEditing(false);
     window.location.hash = chapter !== null ? `#/chapitre/${chapter + 1}` : '#/';
@@ -1614,7 +1615,7 @@ export default function App() {
         aria-hidden="true"
       />
       <Header onNav={goHome} onStart={startReading} onWedding={openWedding} inReader={chapter !== null && !editing && !inWedding} inWedding={inWedding} user={user} onAuth={() => setAuthOpen(true)} />
-      {editing && user && contentUserId === user.id ? (
+      {editing && creator && contentUserId === user?.id ? (
         <Editor
           chapters={chapters}
           edits={edits}
@@ -1624,7 +1625,7 @@ export default function App() {
           onClose={closeEditor}
           onPreview={previewChapter}
         />
-      ) : weddingEditing && user && contentUserId === user.id ? (
+      ) : weddingEditing && creator && contentUserId === user?.id ? (
         <WeddingEditor
           moments={weddingMoments}
           initialId={weddingEditId}

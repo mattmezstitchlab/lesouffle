@@ -44,15 +44,25 @@ export default function AuthPanel({ user, onClose }: { user: User | null; onClos
 
   if (user) {
     return (
-      <div className="flex max-w-[320px] items-center gap-3 text-[12px]">
-        <span className="hidden max-w-[180px] truncate text-smoke sm:block">{user.email}</span>
-        {!isCreator(user) && <span className="hidden text-amber-700 sm:block">Seul le compte créateur peut modifier</span>}
-        <button
-          onClick={() => supabase?.auth.signOut()}
-          className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink/30 px-3 py-1.5 font-semibold uppercase transition-colors hover:bg-ink hover:text-white"
-        >
-          <LogOut className="h-3.5 w-3.5" /> Déconnexion
-        </button>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/30 p-5 backdrop-blur-sm">
+        <div className="relative w-full max-w-md rounded-[24px] bg-white p-7 shadow-2xl">
+          {onClose && <button onClick={onClose} aria-label="Fermer" className="absolute right-5 top-5 cursor-pointer"><X className="h-5 w-5" /></button>}
+          <LogIn className="mb-5 h-6 w-6" />
+          <p className="mb-2 font-display text-[12px] font-semibold tracking-[0.12em] text-smoke uppercase">Mon compte</p>
+          <h2 className="mb-3 font-display text-3xl font-bold tracking-[-0.04em]">Vous êtes connecté</h2>
+          <p className="mb-5 break-all text-sm text-smoke">{user.email}</p>
+          <p className="mb-6 rounded-2xl bg-[#f5f5f5] p-4 text-sm leading-6 text-smoke">
+            {isCreator(user)
+              ? 'Compte créateur : vous pouvez modifier le livre, la timeline et le programme.'
+              : 'Ce compte peut consulter le site, mais seul le compte créateur peut modifier son contenu.'}
+          </p>
+          <button
+            onClick={() => { void supabase?.auth.signOut(); onClose?.(); }}
+            className="flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-ink/30 px-3 py-3 font-semibold uppercase transition-colors hover:bg-ink hover:text-white"
+          >
+            <LogOut className="h-3.5 w-3.5" /> Déconnexion
+          </button>
+        </div>
       </div>
     );
   }

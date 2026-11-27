@@ -24,6 +24,7 @@ import {
 } from '../data/wedding';
 import { Asterisk, Dot, Sparkle, SplitTitle, Visual } from './glyphs';
 import { pad } from './visual-utils';
+import WeddingOperations from './WeddingOperations';
 
 const accentColor = { pink: 'bg-[#ff2e88] text-white', yellow: 'bg-[#ffe45e] text-ink', blue: 'bg-[#1e4dff] text-white', green: 'bg-[#2ecc71] text-ink' } as const;
 
@@ -206,12 +207,14 @@ export default function WeddingPage({
   onEditTimeline,
   onAddMoment,
   previewId,
+  canManageOperations,
 }: {
   moments: WeddingMoment[];
   onEditMoment: (id: string) => void;
   onEditTimeline: () => void;
   onAddMoment: () => void;
   previewId?: string | null;
+  canManageOperations: boolean;
 }) {
   const [scrollTarget, setScrollTarget] = useState<string | null>(previewId ?? null);
   const [query, setQuery] = useState('');
@@ -548,6 +551,8 @@ export default function WeddingPage({
           </button>
         </div>
       </section>
+
+      <WeddingOperations moments={moments} canManage={canManageOperations} />
 
       {/* CTA */}
       <section className="mx-auto max-w-[1440px] px-5 pt-28 pb-24 md:px-10 md:pt-40">

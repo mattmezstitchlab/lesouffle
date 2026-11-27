@@ -1711,6 +1711,7 @@ export default function App() {
                 onEditMoment={(id) => openWeddingEditor(id)}
                 onEditTimeline={() => openWeddingEditor(null)}
                 onAddMoment={addWeddingMoment}
+                canManageOperations={creator}
               />
             </motion.div>
           ) : chapter === null ? (
